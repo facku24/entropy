@@ -3,86 +3,103 @@
 #include <map>
 #include <cmath>
 #include <iomanip>
+#include <stdio.h>
 
 using namespace std;
 
 #define BLKSIZE 1024
 
-float block_entropy(char* blk, size_t len);
-ifstream& file_entropy(ifstream& file);
+float block_entropy(char* blk, unsigned int blk_size);
+void file_entropy(ifstream& file, unsigned int blk_size);
+int parse_cmd_line(int argc, char** argv, char** file_name);
 
-/* PROGRAM TO CALCULATE THE ENTROPY OF A FILE */
 int main (int argc, char* argv[]){
-    char buffer[BLKSIZE];
 
-    // If the program is called with the wrong number of parameters
-    if (argc != 2){
-        cout << "Usage: ./entropy <file_name>" << endl;
+    int blk_size = 0;
+    char* file_name = NULL;
+
+    blk_size = parse_cmd_line(argc, argv, &file_name);
+    
+    if (blk_size < 1){
+        cout << "Usage: ./entropy [ -b <blocksize> ] <file_name>" << endl;
         return -1;
     }
 
-    // open the file in a binary way
-    ifstream myFile (argv[1], ios::in | ios::out | ios::binary);
+    ifstream file(file_name, ios::binary);
 
-    // In case that the file could not be opened correctly
-    if (!myFile){
-        cout << "Se produjo un error al abrir el archivo " << argv[1] << endl;
+    if (!file){
+        cout << "Could not open the file  " << argv[1] << endl;
         return -1;
     }
 
-    // calculate the entropy of the block
-    file_entropy(myFile);
+    file_entropy(file, blk_size);
 
-    // Close the file
-    myFile.close();
+    file.close();
 
     return 0;
 }
 
+int parse_cmd_line(int argc, char** argv, char** file_name){
+    int blk_size= -1;
+
+    if (argc == 2){
+        *file_name = argv[1];
+        return BLKSIZE;
+    } else if (argc == 4 && strcmp(argv[2], "-b")){
+        *file_name = argv[3];
+        sscanf(argv[2], "%d", &blk_size);
+        return blk_size;
+    }
+
+    return blk_size;
+}
+
 // Calculate the entropy of a file
-ifstream& file_entropy(ifstream& file){
-    char buffer[BLKSIZE];
-    int block_number = 0;
-    float blck_entropy = 0;
-    int low_entropy_block = 0;
-    int high_entropy_block = 0;
+void file_entropy(ifstream& file, unsigned int blk_size){
+    char buffer[blk_size];
+    int blk_number = 0;
+    float blk_entropy = 0;
+    int low_entropy_blk = 0;
+    int high_entropy_blk = 0;
 
     cout << "\tblock# \tentropy" << endl;
 
     while(!file.eof()){
-        file.read(buffer, BLKSIZE);
-        blck_entropy =  file ? block_entropy(buffer, BLKSIZE) : block_entropy(buffer, file.gcount()) ;
+        file.read(buffer, blk_size);
+        blk_entropy =  file ? block_entropy(buffer, blk_size) : block_entropy(buffer, file.gcount());
         
-        if (blck_entropy < 2){
-            low_entropy_block++;
-        }
-        if (blck_entropy > 7){
-            high_entropy_block++;
+        if (blk_entropy < 2){
+            low_entropy_blk++;
+        } else if (blk_entropy > 7){
+            high_entropy_blk++;
         }
 
-        cout << "\t" << block_number << "\t" << setprecision(3) << blck_entropy << endl;
+        cout << "\t" << blk_number << "\t" << setprecision(3) << blk_entropy << endl;
 
-        block_number++;
+        blk_number++;
     }
 
-    cout << "Low entropy blocks: " << low_entropy_block << endl;
-    cout << "High entropy blocks: " << high_entropy_block << endl;
+    cout << "Low entropy blocks: " << low_entropy_blk << endl;
+    cout << "High entropy blocks: " << high_entropy_blk << endl;
 
-    return file;
 }
 
 // Calculate the entropy of a single block
-float block_entropy(char* block, size_t len){
-    map<char, long> mapa;
+float block_entropy(char* block, unsigned int blk_size){
+    map<char, long> bytes_map;
 
-    // Create a map for every byte in the file. If the 
-    // byte does not exist, insert the value equal to one. 
-    // Other case, increment it by one
-    for(int i = 0; i < len; i++){
-        if(mapa.find(block[i]) == mapa.end()){
-            mapa[block[i]] = 1;
+    if (blk_size == 0 || block == NULL){
+        return 0;
+    }
+
+    /* Create a map for every byte in the file. If the 
+       byte does not exist, insert the value equal to one. 
+       Other case, increment it by one */
+    for(int i = 0; i < blk_size; i++){
+        if(bytes_map.find(block[i]) == bytes_map.end()){
+            bytes_map[block[i]] = 1;
         } else {
-            mapa[block[i]]++;
+            bytes_map[block[i]]++;
         }
     }
 
@@ -90,13 +107,13 @@ float block_entropy(char* block, size_t len){
     float relative_frec = 0;
     map<char, long>::iterator itr;
     
-    // Iterate over the map, to calculate the relative 
-    // frecuency of the elements in the block
-    for (itr = mapa.begin(); itr != mapa.end(); itr++){
-        relative_frec = itr->second / static_cast<float>(len);
+    /* Iterate over the map, to calculate the relative 
+       frecuency of the elements in the block */
+    for (itr = bytes_map.begin(); itr != bytes_map.end(); itr++){
+        relative_frec = itr->second / static_cast<float>(blk_size);
         relative_frec *= log2(relative_frec);
         entropy += relative_frec;
     }
 
-    return entropy * (-1);
+    return entropy != 0 ? entropy * (-1) : entropy;
 }
